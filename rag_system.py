@@ -1,3 +1,6 @@
+ #!/usr/bin/env python3
+
+from dotenv import load_dotenv
 import os
 from datetime import datetime
 from dateutil.parser import parse
@@ -24,7 +27,10 @@ import fnmatch
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Initialize Elasticsearch client
-es = Elasticsearch(['http://your_elasticsearch_ip:9200'])
+load_dotenv()
+
+# Replace the existing Elasticsearch and OpenAI initialization lines with:
+es = Elasticsearch([os.getenv('ELASTICSEARCH_URL')])
 
 # Initialize embedding model
 model = SentenceTransformer('all-MiniLM-L6-v2')
@@ -48,7 +54,7 @@ metadata_file = "/mnt/vectordb/metadata.json"
 time_scaler = MinMaxScaler()
 
 # OpenAI API key
-openai.api_key = 'your-openai-api-key'
+openai.api_key = os.getenv('OPENAI_API_KEY')
 
 def load_metadata():
     if os.path.exists(metadata_file):

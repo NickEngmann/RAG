@@ -36,10 +36,10 @@ This project implements a Retrieval-Augmented Generation (RAG) system for log an
    pip install -r requirements.txt
    ```
 
-4. Set up your environment variables:
+4. Set up your environment variables in an .env file:
    ```
-   export ELASTICSEARCH_URL=http://your_elasticsearch_ip:9200
-   export OPENAI_API_KEY=your_openai_api_key
+   ELASTICSEARCH_URL=http://your_elasticsearch_ip:9200
+   OPENAI_API_KEY=your_openai_api_key
    ```
 
 ## Usage
