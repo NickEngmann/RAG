@@ -1,4 +1,4 @@
- #!/usr/bin/env python3
+#!/usr/bin/env python3
 
 from dotenv import load_dotenv
 import os
@@ -124,26 +124,25 @@ def process_new_logs():
 
     def producer():
         try:
-            for hit in helpers.scan(es, query=query, index="logs", size=batch_size):
+            for hit in helpers.scan(es, index='logs', query=query):
                 processing_queue.put(hit)
         except Exception as e:
             logging.error(f"Error in producer: {e}")
         finally:
-            processing_queue.put(None)  # Signal end of data
+            processing_queue.put(None)  # Signal end of production
 
     def consumer():
         batch = []
-        try:
-            for hit in iter(processing_queue.get, None):
-                if hit['_id'] not in metadata['processed_ids']:
-                    batch.append(hit)
-                    if len(batch) >= batch_size:
-                        process_batch(batch)
-                        batch = []
-            if batch:
+        while True:
+            item = processing_queue.get()
+            if item is None:
+                if batch:
+                    process_batch(batch)
+                break
+            batch.append(item)
+            if len(batch) >= batch_size:
                 process_batch(batch)
-        except Exception as e:
-            logging.error(f"Error in consumer: {e}")
+                batch = []
 
     producer_thread = threading.Thread(target=producer)
     consumer_thread = threading.Thread(target=consumer)
@@ -154,24 +153,19 @@ def process_new_logs():
     producer_thread.join()
     consumer_thread.join()
 
-    if metadata:
-        metadata['last_processed'] = max(log['timestamp'] for log in metadata.values() if isinstance(log, dict) and 'timestamp' in log)
-        save_metadata(metadata)
-        faiss.write_index(index, index_file)
-
-    logging.info(f"Processed {index.ntotal} vectors in total")
+    # Update last processed time
+    metadata['last_processed'] = datetime.utcnow().isoformat() + 'Z'
+    save_metadata(metadata)
+    logging.info(f"Processed logs until {metadata['last_processed']}")
 
 def rag_query(query_text, time_range=None, hostname_pattern=None, k=5):
-    query_vector = model.encode([query_text])
+    query_vector = model.encode([query_text])[0]
     
+    # Add time context to query vector
     if time_range:
         start_time, end_time = time_range
-        start_timestamp = start_time.timestamp()
-        end_timestamp = end_time.timestamp()
-        
-        normalized_start = time_scaler.transform([[start_timestamp]])[0][0]
-        normalized_end = time_scaler.transform([[end_timestamp]])[0][0]
-        
+        normalized_start = time_scaler.transform([[start_time.timestamp()]])[0][0]
+        normalized_end = time_scaler.transform([[end_time.timestamp()]])[0][0]
         time_context = (normalized_start + normalized_end) / 2
         query_vector = np.hstack((query_vector, np.array([[time_context]])))
     else:
