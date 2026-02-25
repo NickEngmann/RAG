@@ -12,11 +12,11 @@ def run_test(script_name):
 
 if __name__ == "__main__":
     test_scripts = [
-        'tqdm-test.py',
-        'pytorch-test.py',
-        'sentence-test.py',
-        'elastic-test.py',
-        'gc-test.py'
+        'test/tqdm-test.py',
+        'test/pytorch-test.py',
+        'test/sentence-test.py',
+        'test/elastic-test.py',
+        'test/gc-test.py'
     ]
 
     for script in test_scripts:

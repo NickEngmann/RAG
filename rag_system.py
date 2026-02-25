@@ -18,6 +18,7 @@ from tqdm import tqdm
 import logging
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+import pickle
 import uvicorn
 from sklearn.preprocessing import MinMaxScaler
 import openai
@@ -265,7 +266,7 @@ def schedule_processing():
     schedule.every(1).hour.do(process_new_logs)
     while True:
         schedule.run_pending()
-        time.sleep(60)
+        time.sleep(1)  # Check for scheduled tasks every second
 
 if __name__ == "__main__":
     try:
