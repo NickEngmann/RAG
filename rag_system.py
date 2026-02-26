@@ -154,8 +154,13 @@ def process_new_logs():
     producer_thread.join()
     consumer_thread.join()
 
-    if metadata:
-        metadata['last_processed'] = max(log['timestamp'] for log in metadata.values() if isinstance(log, dict) and 'timestamp' in log)
+    # Update last_processed with the most recent timestamp from processed logs
+    recent_timestamps = [
+        log['timestamp'] for log in metadata.values() 
+        if isinstance(log, dict) and 'timestamp' in log and log['timestamp'] > last_processed
+    ]
+    if recent_timestamps:
+        metadata['last_processed'] = max(recent_timestamps)
         save_metadata(metadata)
         faiss.write_index(index, index_file)
 
@@ -198,6 +203,9 @@ def rag_query(query_text, time_range=None, hostname_pattern=None, k=5):
     return results
 
 def generate_llm_response(query, relevant_logs):
+    if not relevant_logs:
+        return "No relevant logs found to generate a response."
+    
     system_prompt = """
     You are an AI research assistant analyzing text chunks from web sources to answer queries accurately and concisely.
 
@@ -217,20 +225,24 @@ def generate_llm_response(query, relevant_logs):
     Your goal is to deliver clear, accurate information based strictly on the provided text chunks, without embellishment or external knowledge.
     """
 
-    chunks = "\n\n".join([f"Chunk {i+1} (Hostname: {log['hostname']}, Timestamp: {log['timestamp']}):\n{log['message']}" for i, log in enumerate(relevant_logs)])
-    
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"Query: {query}\n\nRelevant log entries:\n{chunks}"}
-    ]
+    try:
+        chunks = "\n\n".join([f"Chunk {i+1} (Hostname: {log['hostname']}, Timestamp: {log['timestamp']}):\n{log['message']}" for i, log in enumerate(relevant_logs)])
+        
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Query: {query}\n\nRelevant log entries:\n{chunks}"}
+        ]
 
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=messages,
-        max_tokens=500
-    )
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=messages,
+            max_tokens=500
+        )
 
-    return response.choices[0].message['content'].strip()
+        return response.choices[0].message['content'].strip()
+    except Exception as e:
+        logging.error(f"Error generating LLM response: {str(e)}")
+        return f"Error generating response: {str(e)}"
 
 app = FastAPI()
 
@@ -241,21 +253,55 @@ class Query(BaseModel):
     end_time: str = None
     hostname_pattern: str = None
 
+    @classmethod
+    def __get_validators__(cls):
+        yield cls.validate
+
+    @classmethod
+    def validate(cls, v):
+        if not isinstance(v, dict):
+            raise ValueError('Query must be a dictionary')
+        if not v.get('text'):
+            raise ValueError('Query text is required')
+        if v.get('k') and (v['k'] < 1 or v['k'] > 50):
+            raise ValueError('k must be between 1 and 50')
+        return v
+
 @app.post("/rag_query")
 async def api_rag_query(query: Query):
+    # Validate input
+    if not query.get('text') or not query['text'].strip():
+        raise HTTPException(status_code=400, detail="Query text is required and cannot be empty")
+    
+    if query.get('k') and (query['k'] < 1 or query['k'] > 50):
+        raise HTTPException(status_code=400, detail="k must be between 1 and 50")
+    
     try:
         time_range = None
-        if query.start_time and query.end_time:
-            time_range = (parse(query.start_time), parse(query.end_time))
+        if query.get('start_time') and query.get('end_time'):
+            try:
+                time_range = (parse(query['start_time']), parse(query['end_time']))
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Invalid time format: {str(e)}")
         
-        relevant_logs = rag_query(query.text, time_range, query.hostname_pattern, query.k)
-        llm_response = generate_llm_response(query.text, relevant_logs)
+        relevant_logs = rag_query(query['text'], time_range, query.get('hostname_pattern'), query.get('k', 5))
+        
+        if not relevant_logs:
+            return {
+                "answer": "No relevant logs found for your query.",
+                "relevant_logs": []
+            }
+        
+        llm_response = generate_llm_response(query['text'], relevant_logs)
         
         return {
             "answer": llm_response,
             "relevant_logs": relevant_logs
         }
+    except HTTPException:
+        raise
     except Exception as e:
+        logging.error(f"Error in API query: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 def run_api():
