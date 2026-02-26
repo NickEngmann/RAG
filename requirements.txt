@@ -1,13 +1,20 @@
-elasticsearch==7.17.0
-sentence-transformers==2.2.2
-faiss-cpu==1.7.4
-numpy==1.23.5
-schedule==1.2.0
-tqdm==4.65.0
-fastapi==0.95.2
-uvicorn==0.22.0
-pydantic==1.10.7
-scikit-learn==1.2.2
-openai==0.27.8
-python-dateutil==2.8.2
-python-dotenv
+# Core dependencies
+python-dotenv>=1.0.0
+elasticsearch>=8.0.0
+sentence-transformers>=2.2.0
+torch>=2.0.0
+faiss-cpu>=1.7.0
+numpy>=1.24.0
+fastapi>=0.100.0
+uvicorn>=0.23.0
+
+# Utility dependencies
+python-dateutil>=2.8.2
+tqdm>=4.65.0
+
+# Testing dependencies
+pytest>=7.4.0
+
+# Optional for advanced features
+langchain>=0.1.0
+openai>=1.0.0
