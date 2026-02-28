@@ -17,8 +17,11 @@ def test_torch():
         print(f"Matrix multiplication result shape: {y.shape}")
         
         print("PyTorch test completed successfully.")
+        return True
     except Exception as e:
         print(f"PyTorch test failed. Error: {str(e)}")
+        return False
 
 if __name__ == "__main__":
-    test_torch()
+    success = test_torch()
+    sys.exit(0 if success else 1)
