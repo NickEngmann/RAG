@@ -17,7 +17,7 @@ import json
 from tqdm import tqdm
 import logging
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 import uvicorn
 from sklearn.preprocessing import MinMaxScaler
 import openai
@@ -29,8 +29,22 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # Initialize Elasticsearch client
 load_dotenv()
 
-# Replace the existing Elasticsearch and OpenAI initialization lines with:
-es = Elasticsearch([os.getenv('ELASTICSEARCH_URL')])
+# Validate required environment variables
+required_env_vars = ['ELASTICSEARCH_URL', 'OPENAI_API_KEY']
+missing_vars = [var for var in required_env_vars if not os.getenv(var)]
+if missing_vars:
+    logging.error(f"Missing required environment variables: {', '.join(missing_vars)}")
+    raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
+
+# Initialize Elasticsearch client with error handling
+try:
+    es = Elasticsearch([os.getenv('ELASTICSEARCH_URL')])
+    # Test connection
+    es.info()
+    logging.info("Successfully connected to Elasticsearch")
+except Exception as e:
+    logging.error(f"Failed to connect to Elasticsearch: {e}")
+    raise
 
 # Initialize embedding model
 model = SentenceTransformer('all-MiniLM-L6-v2')
@@ -51,7 +65,13 @@ else:
 metadata_file = "/mnt/vectordb/metadata.json"
 
 # Initialize time scaler
-time_scaler = MinMaxScaler()
+# Fit the scaler on a reasonable range of timestamps (last 30 days)
+from datetime import timedelta
+now = datetime.now()
+thirty_days_ago = now - timedelta(days=30)
+future_time = now + timedelta(days=1)
+time_scaler.fit([[thirty_days_ago.timestamp()], [future_time.timestamp()]])
+logging.info("Time scaler initialized with 30-day range")
 
 # OpenAI API key
 openai.api_key = os.getenv('OPENAI_API_KEY')
@@ -232,7 +252,35 @@ def generate_llm_response(query, relevant_logs):
 
     return response.choices[0].message['content'].strip()
 
-app = FastAPI()
+app = FastAPI(title="RAG Query API", version="1.1.0")
+
+@app.on_event("startup")
+async def startup_event():
+    logging.info("Starting RAG API server...")
+    try:
+        # Verify Elasticsearch connection
+        es.info()
+        logging.info("Elasticsearch connection verified")
+        
+        # Load or create FAISS index
+        load_or_create_faiss()
+        
+        # Load metadata
+        load_metadata()
+        
+        logging.info("RAG API server started successfully")
+    except Exception as e:
+        logging.error(f"Failed to start RAG API server: {e}")
+        raise
+
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "vectors_indexed": index.ntotal,
+        "metadata_loaded": bool(metadata)
+    }
 
 class Query(BaseModel):
     text: str
@@ -240,22 +288,57 @@ class Query(BaseModel):
     start_time: str = None
     end_time: str = None
     hostname_pattern: str = None
+    
+    class Config:
+        validate_assignment = True
+        
+    @validator('text')
+    def validate_text(cls, v):
+        if not v or not v.strip():
+            raise ValueError("Query text cannot be empty")
+        if len(v) > 10000:
+            raise ValueError("Query text too long (max 10000 characters)")
+        return v.strip()
+    
+    @validator('k')
+    def validate_k(cls, v):
+        if v < 1 or v > 100:
+            raise ValueError("k must be between 1 and 100")
+        return v
 
 @app.post("/rag_query")
 async def api_rag_query(query: Query):
     try:
+        logging.info(f"Received RAG query: {query.text[:50]}...")
         time_range = None
         if query.start_time and query.end_time:
-            time_range = (parse(query.start_time), parse(query.end_time))
+            try:
+                time_range = (parse(query.start_time), parse(query.end_time))
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Invalid time range: {str(e)}")
+        
+        if index.ntotal == 0:
+            raise HTTPException(status_code=503, detail="No vectors indexed yet. Please wait while logs are processed.")
         
         relevant_logs = rag_query(query.text, time_range, query.hostname_pattern, query.k)
+        
+        if not relevant_logs:
+            return {
+                "answer": "No relevant logs found matching your query.",
+                "relevant_logs": [],
+                "warning": "No matching logs found"
+            }
+        
         llm_response = generate_llm_response(query.text, relevant_logs)
         
         return {
             "answer": llm_response,
             "relevant_logs": relevant_logs
         }
+    except HTTPException:
+        raise
     except Exception as e:
+        logging.error(f"Error processing query: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 def run_api():
