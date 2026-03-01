@@ -1,74 +1,89 @@
 # Log Analysis RAG System
 
-This project implements a Retrieval-Augmented Generation (RAG) system for log analysis. It combines efficient log retrieval using vector embeddings with natural language processing capabilities to provide insightful answers to queries about log data.
+This project implements a Retrieval-Augmented Generation (RAG) system for log analysis. It combines efficient log retrieval using vector embeddings with natural language processing using OpenAI's GPT-3.5-turbo model. The system ingests logs from Elasticsearch, creates vector embeddings using SentenceTransformers, and exposes a FastAPI endpoint for natural language queries.
 
 ## Features
 
-- Efficient log ingestion from Elasticsearch
-- Vector embedding creation using Sentence Transformers
-- Fast similarity search using FAISS
-- Time-aware and hostname-aware querying
-- Natural language query processing using OpenAI's GPT model
-- RESTful API for easy integration
+- Real-time log ingestion from Elasticsearch
+- Vector embeddings using SentenceTransformer('all-MiniLM-L6-v2')
+- Time-aware retrieval with FAISS index
+- FastAPI endpoint for natural language queries
+- Scheduled log processing (every hour)
+- Hostname and time range filtering
 
 ## Prerequisites
 
-- Python 3.8+
-- Elasticsearch instance with log data
+- Python 3.12+
+- Elasticsearch instance
 - OpenAI API key
+- Persistent storage for vector index and metadata
 
 ## Installation
 
 1. Clone the repository:
-   ```
-   git clone https://github.com/yourusername/log-analysis-rag.git
-   cd log-analysis-rag
-   ```
+```bash
+cd /workspace/repo
+```
 
-2. Create a virtual environment and activate it:
-   ```
-   python -m venv venv
-   source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
-   ```
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
 
-3. Install the required packages:
-   ```
-   pip install -r requirements.txt
-   ```
+3. Set up environment variables:
+```bash
+cp .env.example .env
+# Edit .env with your Elasticsearch URL and OpenAI API key
+```
 
-4. Set up your environment variables in an .env file:
-   ```
-   ELASTICSEARCH_URL=http://your_elasticsearch_ip:9200
-   OPENAI_API_KEY=your_openai_api_key
-   ```
+4. Create persistent storage directory:
+```bash
+mkdir -p /mnt/vectordb
+```
 
 ## Usage
 
-1. Start the RAG system:
-   ```
-   python rag_system.py
-   ```
+### Running the System
 
-2. The system will begin processing logs from Elasticsearch and start the API server.
+```bash
+python rag_system.py
+```
 
-3. To query the system, send a POST request to `http://localhost:8000/rag_query` with a JSON body:
-   ```json
-   {
-     "text": "What are the most common errors?",
-     "k": 5,
-     "start_time": "2024-08-01T00:00:00Z",
-     "end_time": "2024-08-09T00:00:00Z",
-     "hostname_pattern": "web-server-*"
-   }
-   ```
+This will:
+1. Process existing logs from Elasticsearch
+2. Start the FastAPI server on port 8000
+3. Schedule hourly log processing
 
-4. The system will return a JSON response with the generated answer and relevant log entries.
+### API Endpoint
+
+The system exposes a `/rag_query` endpoint:
+
+```bash
+curl -X POST http://localhost:8000/rag_query \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "find errors related to database connection",
+    "k": 5,
+    "start_time": "2023-01-01T00:00:00Z",
+    "end_time": "2023-01-02T00:00:00Z",
+    "hostname_pattern": "server-*"
+  }'
+```
+
+### Testing
+
+Run the test suite:
+
+```bash
+python -m pytest tests/ -v
+```
 
 ## Configuration
 
-- Adjust the `batch_size` in `process_new_logs()` to control memory usage during log processing.
-- Modify the `schedule.every(1).hour.do(process_new_logs)` line to change how often new logs are processed.
-- Update the `dimension` variable if you change the embedding model.
+- **Vector Index**: Stored at `/mnt/vectordb/vector_index.faiss`
+- **Metadata**: Stored at `/mnt/vectordb/metadata.json`
+- **Log Processing**: Processes logs since last processed timestamp
+- **Batch Size**: 1000 logs per batch
 
 ## Contributing
 
