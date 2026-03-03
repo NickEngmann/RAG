@@ -57,16 +57,29 @@ time_scaler = MinMaxScaler()
 openai.api_key = os.getenv('OPENAI_API_KEY')
 
 def load_metadata():
+    """Load metadata from file or return default if file doesn't exist."""
     if os.path.exists(metadata_file):
-        with open(metadata_file, 'r') as f:
-            return json.load(f)
+        try:
+            with open(metadata_file, 'r') as f:
+                return json.load(f)
+        except json.JSONDecodeError as e:
+            logging.warning(f"Failed to parse metadata file: {e}. Using default metadata.")
+            return {'last_processed': '1970-01-01T00:00:00.000Z', 'processed_ids': set()}
     return {'last_processed': '1970-01-01T00:00:00.000Z', 'processed_ids': set()}
 
 def save_metadata(metadata):
-    metadata_to_save = metadata.copy()
-    metadata_to_save['processed_ids'] = list(metadata_to_save['processed_ids'])
-    with open(metadata_file, 'w') as f:
-        json.dump(metadata_to_save, f)
+    """Save metadata to file."""
+    try:
+        metadata_to_save = metadata.copy()
+        metadata_to_save['processed_ids'] = list(metadata_to_save.get('processed_ids', []))
+        with open(metadata_file, 'w') as f:
+            json.dump(metadata_to_save, f, indent=2)
+        logging.info(f"Metadata saved successfully")
+    except IOError as e:
+        logging.error(f"Failed to save metadata: {e}")
+        raise
+
+
 
 metadata = load_metadata()
 metadata['processed_ids'] = set(metadata.get('processed_ids', []))
@@ -85,21 +98,28 @@ def vectorize_logs(log_texts, timestamps):
     return combined_vectors
 
 def process_batch(batch):
-    processed_logs, timestamps, hostnames = zip(*[preprocess_log(log['_source']) for log in batch])
-    vectors = vectorize_logs(processed_logs, timestamps)
-    faiss.normalize_L2(vectors)
-    
-    with threading.Lock():
-        index.add(vectors)
-        for i, log in enumerate(batch):
-            vector_id = str(index.ntotal - len(batch) + i)
-            metadata[vector_id] = {
-                'id': log['_id'],
-                'timestamp': log['_source']['@timestamp'],
-                'message': log['_source']['message'],
-                'hostname': hostnames[i]
-            }
-            metadata['processed_ids'].add(log['_id'])
+    """Process a batch of logs: preprocess, vectorize, and store."""
+    try:
+        processed_logs, timestamps, hostnames = zip(*[preprocess_log(log['_source']) for log in batch])
+        vectors = vectorize_logs(processed_logs, timestamps)
+        faiss.normalize_L2(vectors)
+        
+        with threading.Lock():
+            index.add(vectors)
+            for i, log in enumerate(batch):
+                vector_id = str(index.ntotal - len(batch) + i)
+                metadata[vector_id] = {
+                    'id': log['_id'],
+                    'timestamp': log['_source']['@timestamp'],
+                    'message': log['_source']['message'],
+                    'hostname': hostnames[i]
+                }
+                metadata['processed_ids'].add(log['_id'])
+        
+        logging.info(f"Processed batch of {len(batch)} logs")
+    except Exception as e:
+        logging.error(f"Error processing batch: {e}")
+        raise
 
 def process_new_logs():
     last_processed = metadata.get('last_processed', '1970-01-01T00:00:00.000Z')
@@ -162,75 +182,101 @@ def process_new_logs():
     logging.info(f"Processed {index.ntotal} vectors in total")
 
 def rag_query(query_text, time_range=None, hostname_pattern=None, k=5):
-    query_vector = model.encode([query_text])
+    """Perform RAG query with optional time range and hostname filtering."""
+    if not query_text:
+        logging.warning("Empty query text provided")
+        return []
     
-    if time_range:
-        start_time, end_time = time_range
-        start_timestamp = start_time.timestamp()
-        end_timestamp = end_time.timestamp()
+    try:
+        query_vector = model.encode([query_text])
         
-        normalized_start = time_scaler.transform([[start_timestamp]])[0][0]
-        normalized_end = time_scaler.transform([[end_timestamp]])[0][0]
+        if time_range:
+            start_time, end_time = time_range
+            start_timestamp = start_time.timestamp()
+            end_timestamp = end_time.timestamp()
+            
+            normalized_start = time_scaler.transform([[start_timestamp]])[0][0]
+            normalized_end = time_scaler.transform([[end_timestamp]])[0][0]
+            
+            time_context = (normalized_start + normalized_end) / 2
+            query_vector = np.hstack((query_vector, np.array([[time_context]])))
+        else:
+            query_vector = np.hstack((query_vector, np.array([[0.5]])))  # Neutral time context
         
-        time_context = (normalized_start + normalized_end) / 2
-        query_vector = np.hstack((query_vector, np.array([[time_context]])))
-    else:
-        query_vector = np.hstack((query_vector, np.array([[0.5]])))  # Neutral time context
-    
-    faiss.normalize_L2(query_vector)
-    _, I = index.search(query_vector, k * 2)  # Fetch more results initially
-    
-    results = []
-    for i in I[0]:
-        if str(i) in metadata:
-            result = metadata[str(i)]
-            if time_range:
-                result_time = parse(result['timestamp'])
-                if not (start_time <= result_time <= end_time):
-                    continue
-            if hostname_pattern:
-                if not fnmatch.fnmatch(result['hostname'], hostname_pattern):
-                    continue
-            results.append(result)
-        if len(results) == k:
-            break
-    
-    return results
+        faiss.normalize_L2(query_vector)
+        _, I = index.search(query_vector, k * 2)  # Fetch more results initially
+        
+        results = []
+        for i in I[0]:
+            if str(i) in metadata:
+                result = metadata[str(i)]
+                if time_range:
+                    result_time = parse(result['timestamp'])
+                    if not (start_time <= result_time <= end_time):
+                        continue
+                if hostname_pattern:
+                    if not fnmatch.fnmatch(result['hostname'], hostname_pattern):
+                        continue
+                results.append(result)
+            if len(results) == k:
+                break
+        
+        logging.info(f"RAG query returned {len(results)} results")
+        return results
+    except Exception as e:
+        logging.error(f"Error in rag_query: {e}")
+        raise
 
 def generate_llm_response(query, relevant_logs):
-    system_prompt = """
-    You are an AI research assistant analyzing text chunks from web sources to answer queries accurately and concisely.
-
-    Key instructions:
-    1. Use ONLY the information contained in the provided text chunks to formulate your response.
-    2. If no text chunks are provided, or if the chunks contain no relevant information to the query, respond with "I don't know".
-    3. Do not use any external knowledge or make assumptions beyond what is explicitly stated in the chunks.
-    4. Do mention or reference the sources of the information.
-
-    Guidelines for responses:
-    1. Provide concise, relevant answers that directly address the query.
-    2. Synthesize information from multiple chunks if applicable.
-    3. Maintain a professional and objective tone.
-    4. If the information in the chunks is insufficient or contradictory, state this clearly.
-    5. If a query is ambiguous, respond based solely on the most likely interpretation given the available chunks.
-
-    Your goal is to deliver clear, accurate information based strictly on the provided text chunks, without embellishment or external knowledge.
-    """
-
-    chunks = "\n\n".join([f"Chunk {i+1} (Hostname: {log['hostname']}, Timestamp: {log['timestamp']}):\n{log['message']}" for i, log in enumerate(relevant_logs)])
+    """Generate LLM response based on relevant logs."""
+    if not relevant_logs:
+        return "No relevant logs found."
     
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"Query: {query}\n\nRelevant log entries:\n{chunks}"}
-    ]
+    if not query:
+        logging.warning("Empty query provided for LLM response")
+        return "No relevant logs found."
+    
+    try:
+        system_prompt = """
+        You are an AI research assistant analyzing log entries to answer queries accurately and concisely.
 
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=messages,
-        max_tokens=500
-    )
+        Key instructions:
+        1. Use ONLY the information contained in the provided log entries to formulate your response.
+        2. If no log entries are provided, or if they contain no relevant information to the query, respond with "I don't know".
+        3. Do not use any external knowledge or make assumptions beyond what is explicitly stated in the logs.
+        4. Reference the sources of the information when applicable.
 
-    return response.choices[0].message['content'].strip()
+        Guidelines for responses:
+        1. Provide concise, relevant answers that directly address the query.
+        2. Synthesize information from multiple log entries if applicable.
+        3. Maintain a professional and objective tone.
+        4. If the information in the logs is insufficient or contradictory, state this clearly.
+        5. If a query is ambiguous, respond based solely on the most likely interpretation given the available logs.
+
+        Your goal is to deliver clear, accurate information based strictly on the provided log entries, without embellishment or external knowledge.
+        """
+
+        chunks = "\n\n".join([
+            f"Chunk {i+1} (Hostname: {log['hostname']}, Timestamp: {log['timestamp']}):\n{log['message']}"
+            for i, log in enumerate(relevant_logs)
+        ])
+        
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Query: {query}\n\nRelevant log entries:\n{chunks}"}
+        ]
+
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=messages,
+            max_tokens=500
+        )
+
+        logging.info("LLM response generated successfully")
+        return response.choices[0].message['content'].strip()
+    except Exception as e:
+        logging.error(f"Error generating LLM response: {e}")
+        return f"Error generating response: {str(e)}"
 
 app = FastAPI()
 
@@ -243,19 +289,36 @@ class Query(BaseModel):
 
 @app.post("/rag_query")
 async def api_rag_query(query: Query):
+    """API endpoint for RAG queries."""
     try:
+        # Validate query parameters
+        if not query.text:
+            raise HTTPException(status_code=400, detail="Query text is required")
+        if query.k < 1:
+            raise HTTPException(status_code=400, detail="k must be at least 1")
+        
+        # Parse time range if provided
         time_range = None
         if query.start_time and query.end_time:
-            time_range = (parse(query.start_time), parse(query.end_time))
+            try:
+                time_range = (parse(query.start_time), parse(query.end_time))
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Invalid time range: {str(e)}")
         
+        # Perform RAG query
         relevant_logs = rag_query(query.text, time_range, query.hostname_pattern, query.k)
+        
+        # Generate LLM response
         llm_response = generate_llm_response(query.text, relevant_logs)
         
         return {
             "answer": llm_response,
             "relevant_logs": relevant_logs
         }
+    except HTTPException:
+        raise
     except Exception as e:
+        logging.error(f"Error in API endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 def run_api():
