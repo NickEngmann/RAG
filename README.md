@@ -44,25 +44,71 @@ This project implements a Retrieval-Augmented Generation (RAG) system for log an
 
 ## Usage
 
-1. Start the RAG system:
+### Full System (Indexing + API Server)
+
+Run the complete system which processes logs and starts the API server:
    ```
    python rag_system.py
    ```
 
-2. The system will begin processing logs from Elasticsearch and start the API server.
+This script will:
+- Process logs from Elasticsearch and create vector embeddings (indexing phase)
+- Start the FastAPI server on port 8000
+- Run scheduled log processing every hour
 
-3. To query the system, send a POST request to `http://localhost:8000/rag_query` with a JSON body:
-   ```json
-   {
-     "text": "What are the most common errors?",
-     "k": 5,
-     "start_time": "2024-08-01T00:00:00Z",
-     "end_time": "2024-08-09T00:00:00Z",
-     "hostname_pattern": "web-server-*"
-   }
+Note: The indexing phase runs on startup. For production use, you may want to run indexing separately from the API server.
+
+### Standalone API Server Only
+
+If you only need the API server without log processing:
+   ```python
+   from rag_system import app
+   import uvicorn
+
+   uvicorn.run(app, host="0.0.0.0", port=8000)
+   ```
+
+### Querying the API
+
+Once the API server is running, send POST requests to `http://localhost:8000/rag_query`:
+   ```bash
+   curl -X POST http://localhost:8000/rag_query \
+     -H "Content-Type: application/json" \
+     -d '{
+       "text": "What are the most common errors?",
+       "k": 5,
+       "start_time": "2024-08-01T00:00:00Z",
+       "end_time": "2024-08-09T00:00:00Z",
+       "hostname_pattern": "web-server-*"
+     }'
+   ```
+
+The system will return a JSON response with the generated answer and relevant log entries.
+
+3. To query the system, send a POST request to `http://localhost:8000/rag_query`:
+   ```bash
+   curl -X POST http://localhost:8000/rag_query \
+     -H "Content-Type: application/json" \
+     -d '{
+       "text": "What are the most common errors?",
+       "k": 5,
+       "start_time": "2024-08-01T00:00:00Z",
+       "end_time": "2024-08-09T00:00:00Z",
+       "hostname_pattern": "web-server-*"
+     }'
    ```
 
 4. The system will return a JSON response with the generated answer and relevant log entries.
+
+### Standalone API Usage
+
+If you only need the API server without log processing:
+```python
+from rag_system import app
+import uvicorn
+
+uvicorn.run(app, host="0.0.0.0", port=8000)
+```
 
 ## Configuration
 
@@ -73,6 +119,18 @@ This project implements a Retrieval-Augmented Generation (RAG) system for log an
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+## Testing
+
+The project includes standalone test scripts in the `test/` directory:
+- `elastic-test.py` - Elasticsearch connectivity tests
+- `sentence-test.py` - Sentence transformer tests
+- `pytorch-test.py` - PyTorch environment tests
+- `gc-test.py` - Garbage collection tests
+- `tqdm-test.py` - Progress bar tests
+- `requirements-test.py` - Dependency tests
+
+Note: There is no formal pytest test suite. These scripts are meant for manual testing and verification of individual components.
 
 ## License
 
