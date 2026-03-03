@@ -77,3 +77,49 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Testing
+
+The project includes test scripts in the `test/` directory:
+
+```bash
+python test/requirements-test.py
+```
+
+This runs all individual test scripts (tqdm-test.py, pytorch-test.py, sentence-test.py, elastic-test.py, gc-test.py) to verify dependencies and basic functionality.
+
+Note: Tests require Elasticsearch and OpenAI API to be configured.
+
+## Environment Variables
+
+Required environment variables (can be stored in `.env` file):
+
+- `ELASTICSEARCH_URL` - URL of your Elasticsearch instance (e.g., http://localhost:9200)
+- `OPENAI_API_KEY` - Your OpenAI API key for GPT model access
+
+## Data Storage
+
+- FAISS index: `/mnt/vectordb/vector_index.faiss`
+- Metadata: `/mnt/vectordb/metadata.json`
+
+The system supports checkpointing - if interrupted, it saves progress and can resume from the last checkpoint.
+
+## Testing
+
+Run individual test scripts:
+
+```bash
+python test/tqdm-test.py
+python test/pytorch-test.py
+python test/sentence-test.py
+python test/elastic-test.py
+python test/gc-test.py
+```
+
+Run all tests with the test runner:
+
+```bash
+python test/requirements-test.py
+```
+
+**Note**: The `requirements-test.py` runner has a known bug where it looks for test scripts in the wrong directory. Use individual test commands above for reliable testing.
