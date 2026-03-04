@@ -21,7 +21,7 @@ This project implements a Retrieval-Augmented Generation (RAG) system for log an
 
 1. Clone the repository:
    ```
-   git clone https://github.com/yourusername/log-analysis-rag.git
+   git clone https://github.com/yourusername/log-analysis-rag-system/log-analysis-rag.git
    cd log-analysis-rag
    ```
 
@@ -73,6 +73,57 @@ This project implements a Retrieval-Augmented Generation (RAG) system for log an
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+## Testing
+
+The project includes integration test scripts in the `test/` directory. To run all tests:
+
+```bash
+python test/requirements-test.py
+```
+
+Individual test scripts:
+- `test/elastic-test.py` - Elasticsearch connectivity test
+- `test/sentence-test.py` - Sentence Transformers embedding test
+- `test/pytorch-test.py` - PyTorch installation test
+- `test/tqdm-test.py` - Progress bar test
+- `test/gc-test.py` - Garbage collection test
+
+Note: Tests require external dependencies (Elasticsearch instance, OpenAI API key) to run successfully.
+
+## API Reference
+
+### POST /rag_query
+
+Process a natural language query against log data.
+
+**Request Body:**
+```json
+{
+  "text": "What are the most common errors?",
+  "k": 5,
+  "start_time": "2024-08-01T00:00:00Z",
+  "end_time": "2024-08-09T00:00:00Z",
+  "hostname_pattern": "web-server-*"
+}
+```
+
+**Parameters:**
+- `text` (string, required): Natural language query to process
+- `k` (integer, optional): Number of similar logs to retrieve (default: 5)
+- `start_time` (string, optional): ISO 8601 start time filter
+- `end_time` (string, optional): ISO 8601 end time filter
+- `hostname_pattern` (string, optional): Regex pattern for hostname filtering
+
+**Response:**
+```json
+{
+  "answer": "Generated response from OpenAI...",
+  "relevant_logs": [
+    {"timestamp": "...", "hostname": "...", "message": "..."}
+  ]
+}
+```
 
 ## License
 
