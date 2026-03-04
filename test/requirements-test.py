@@ -1,8 +1,10 @@
 import subprocess
+import os
 
 def run_test(script_name):
     try:
-        result = subprocess.run(['python', script_name], capture_output=True, text=True)
+        script_path = os.path.join(os.path.dirname(__file__), script_name)
+        result = subprocess.run(['python', script_path], capture_output=True, text=True)
         print(f"Running {script_name}...\n")
         print(result.stdout)
         if result.stderr:

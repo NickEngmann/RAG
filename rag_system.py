@@ -56,6 +56,9 @@ time_scaler = MinMaxScaler()
 # OpenAI API key
 openai.api_key = os.getenv('OPENAI_API_KEY')
 
+# Thread-safe lock for concurrent operations
+process_lock = threading.Lock()
+
 def load_metadata():
     if os.path.exists(metadata_file):
         with open(metadata_file, 'r') as f:
@@ -64,7 +67,8 @@ def load_metadata():
 
 def save_metadata(metadata):
     metadata_to_save = metadata.copy()
-    metadata_to_save['processed_ids'] = list(metadata_to_save['processed_ids'])
+    if 'processed_ids' in metadata_to_save:
+        metadata_to_save['processed_ids'] = list(metadata_to_save['processed_ids'])
     with open(metadata_file, 'w') as f:
         json.dump(metadata_to_save, f)
 
@@ -89,7 +93,7 @@ def process_batch(batch):
     vectors = vectorize_logs(processed_logs, timestamps)
     faiss.normalize_L2(vectors)
     
-    with threading.Lock():
+    with process_lock:
         index.add(vectors)
         for i, log in enumerate(batch):
             vector_id = str(index.ntotal - len(batch) + i)
@@ -154,8 +158,7 @@ def process_new_logs():
     producer_thread.join()
     consumer_thread.join()
 
-    if metadata:
-        metadata['last_processed'] = max(log['timestamp'] for log in metadata.values() if isinstance(log, dict) and 'timestamp' in log)
+    if metadata and 'last_processed' in metadata:
         save_metadata(metadata)
         faiss.write_index(index, index_file)
 
@@ -224,13 +227,17 @@ def generate_llm_response(query, relevant_logs):
         {"role": "user", "content": f"Query: {query}\n\nRelevant log entries:\n{chunks}"}
     ]
 
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=messages,
-        max_tokens=500
-    )
-
-    return response.choices[0].message['content'].strip()
+    try:
+        # Use the new OpenAI API (ChatCompletion.create is deprecated)
+        response = openai.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=messages,
+            max_tokens=500
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        logging.error(f"OpenAI API error: {e}")
+        raise HTTPException(status_code=500, detail=f"LLM generation failed: {str(e)}")
 
 app = FastAPI()
 

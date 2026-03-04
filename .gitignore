@@ -1,1 +1,13 @@
 .env
+# Auto-added by Marisol pipeline
+node_modules/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.o
+*.so
+debug_*.py
+.cache/
+dist/
+build/
+*.egg-info/
