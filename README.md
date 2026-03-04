@@ -1,74 +1,90 @@
 # Log Analysis RAG System
 
-This project implements a Retrieval-Augmented Generation (RAG) system for log analysis. It combines efficient log retrieval using vector embeddings with natural language processing capabilities to provide insightful answers to queries about log data.
+This project implements a Retrieval-Augmented Generation (RAG) system for log analysis. It combines efficient log retrieval using vector embeddings with natural language processing capabilities. The system processes logs, creates embeddings, and stores them in Elasticsearch for semantic search.
 
 ## Features
 
-- Efficient log ingestion from Elasticsearch
-- Vector embedding creation using Sentence Transformers
-- Fast similarity search using FAISS
-- Time-aware and hostname-aware querying
-- Natural language query processing using OpenAI's GPT model
-- RESTful API for easy integration
-
-## Prerequisites
-
-- Python 3.8+
-- Elasticsearch instance with log data
-- OpenAI API key
+- **Log Processing**: Hourly scheduled processing of log files
+- **Vector Embeddings**: Uses sentence-transformers for semantic log representation
+- **Elasticsearch Integration**: Stores embeddings and metadata for efficient retrieval
+- **OpenAI Integration**: LLM-based question answering on log data
+- **Progress Tracking**: tqdm-based progress bars for long-running operations
+- **Checkpoint Support**: Can resume from interruptions
 
 ## Installation
 
+### Prerequisites
+
+- Python 3.8+
+- Elasticsearch running locally or on a server
+- OpenAI API key
+
+### Setup
+
 1. Clone the repository:
-   ```
-   git clone https://github.com/yourusername/log-analysis-rag.git
-   cd log-analysis-rag
-   ```
-
-2. Create a virtual environment and activate it:
-   ```
-   python -m venv venv
-   source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
+   ```bash
+   git clone <repository-url>
+   cd <repository-directory>
    ```
 
-3. Install the required packages:
-   ```
+2. Install dependencies:
+   ```bash
    pip install -r requirements.txt
    ```
 
-4. Set up your environment variables in an .env file:
+3. Create a `.env` file with required environment variables:
    ```
-   ELASTICSEARCH_URL=http://your_elasticsearch_ip:9200
-   OPENAI_API_KEY=your_openai_api_key
+   ELASTICSEARCH_URL=http://localhost:9200
+   OPENAI_API_KEY=your_api_key_here
    ```
 
-## Usage
-
-1. Start the RAG system:
-   ```
+4. Run the main script:
+   ```bash
    python rag_system.py
    ```
 
-2. The system will begin processing logs from Elasticsearch and start the API server.
+## Testing
 
-3. To query the system, send a POST request to `http://localhost:8000/rag_query` with a JSON body:
-   ```json
-   {
-     "text": "What are the most common errors?",
-     "k": 5,
-     "start_time": "2024-08-01T00:00:00Z",
-     "end_time": "2024-08-09T00:00:00Z",
-     "hostname_pattern": "web-server-*"
-   }
-   ```
+### Running Tests
 
-4. The system will return a JSON response with the generated answer and relevant log entries.
+The project uses standalone test scripts in the `test/` directory (not pytest):
 
-## Configuration
+```bash
+# Run all tests via test runner
+python test/requirements-test.py
 
-- Adjust the `batch_size` in `process_new_logs()` to control memory usage during log processing.
-- Modify the `schedule.every(1).hour.do(process_new_logs)` line to change how often new logs are processed.
-- Update the `dimension` variable if you change the embedding model.
+# Run individual tests
+python test/elastic-test.py      # Tests Elasticsearch connectivity
+python test/pytorch-test.py      # Tests PyTorch installation
+python test/sentence-test.py     # Tests sentence-transformers model loading
+python test/tqdm-test.py         # Tests tqdm progress bars
+python test/gc-test.py           # Tests garbage collection
+```
+
+### Test Requirements
+
+- **External services**: Elasticsearch must be running (or mocked)
+- **API access**: OpenAI API key required for LLM-based tests
+- **Dependencies**: All packages from `requirements.txt` must be installed
+- **Python version**: 3.8+
+
+**Note**: This project uses standalone test scripts rather than pytest. Tests verify dependency installation and service connectivity. For CI/CD or isolated testing, mock Elasticsearch and OpenAI services.
+
+## Architecture
+
+### Components
+
+1. **rag_system.py**: Main entry point for log processing and RAG operations
+2. **test/**: Directory containing standalone test scripts
+3. **requirements.txt**: Python dependencies
+4. **.env**: Environment variables configuration
+
+### Data Flow
+
+1. Logs are processed hourly via schedule library
+2. Text embeddings created using sentence-transformers 'all-MiniLM-L6-v2'
+3. Embeddings stored in Elasticsearch with metadata
+4. Queries processed through OpenAI for natural language responses
 
 ## Contributing
 
