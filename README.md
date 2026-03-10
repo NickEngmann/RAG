@@ -13,9 +13,10 @@ This project implements a Retrieval-Augmented Generation (RAG) system for log an
 
 ## Prerequisites
 
-- Python 3.8+
+- Python 3.12+
 - Elasticsearch instance with log data
 - OpenAI API key
+- Directory /mnt/vectordb/ for storing vector index and metadata (create if it doesn't exist)
 
 ## Installation
 
@@ -69,6 +70,39 @@ This project implements a Retrieval-Augmented Generation (RAG) system for log an
 - Adjust the `batch_size` in `process_new_logs()` to control memory usage during log processing.
 - Modify the `schedule.every(1).hour.do(process_new_logs)` line to change how often new logs are processed.
 - Update the `dimension` variable if you change the embedding model.
+
+## Testing
+
+The project includes individual test scripts for verifying each component. Note: `test-runner.py` does not exist - run tests individually.
+
+- `test/elastic-test.py` - Verifies Elasticsearch connection and basic operations
+- `test/sentence-test.py` - Tests Sentence Transformers embedding generation
+- `test/pytorch-test.py` - Validates PyTorch installation and GPU availability
+- `test/gc-test.py` - Tests garbage collection and memory management
+- `test/tqdm-test.py` - Verifies progress bar functionality
+- `test/requirements-test.py` - Checks all required dependencies are installed
+
+To run a specific test:
+```bash
+python test/elastic-test.py
+python test/sentence-test.py
+python test/pytorch-test.py
+python test/gc-test.py
+python test/tqdm-test.py
+python test/requirements-test.py
+```
+
+## Environment Setup
+
+Required environment variables (set in .env file or environment):
+- `ELASTICSEARCH_URL` - URL of your Elasticsearch instance
+- `OPENAI_API_KEY` - Your OpenAI API key for GPT model access
+
+Data storage paths:
+- Vector index: `/mnt/vectordb/vector_index.faiss`
+- Metadata: `/mnt/vectordb/metadata.json`
+
+Ensure the `/mnt/vectordb/` directory exists before running the system.
 
 ## Contributing
 
