@@ -46,7 +46,7 @@ This project implements a Retrieval-Augmented Generation (RAG) system for log an
 
 1. Start the RAG system:
    ```
-   python rag_system.py
+   uvicorn rag_system:app --host 0.0.0.0 --port 8000
    ```
 
 2. The system will begin processing logs from Elasticsearch and start the API server.
@@ -73,6 +73,67 @@ This project implements a Retrieval-Augmented Generation (RAG) system for log an
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+## Testing
+
+The project includes integration test scripts for individual components. Note that these tests require live Elasticsearch and OpenAI services.
+
+### Test Scripts
+
+- `test/pytorch-test.py` - Tests PyTorch installation and GPU availability
+- `test/sentence-test.py` - Tests Sentence Transformers model loading
+- `test/elastic-test.py` - Tests Elasticsearch connection and queries
+- `test/tqdm-test.py` - Tests progress bar functionality
+- `test/gc-test.py` - Tests garbage collection behavior
+
+### Running Tests
+
+To run all integration tests:
+```bash
+python test/requirements-test.py
+
+**Note**: These tests require live Elasticsearch and OpenAI services. They cannot run in an isolated environment without these services running.
+```
+
+To run individual tests:
+```bash
+python test/pytorch-test.py
+python test/sentence-test.py
+python test/elastic-test.py
+python test/tqdm-test.py
+python test/gc-test.py
+```
+
+### Test Requirements
+
+- Live Elasticsearch instance running
+- Valid OpenAI API key configured
+- Sufficient system memory for embedding models
+
+## Architecture
+
+### Components
+
+1. **Elasticsearch Integration**: Retrieves log data from Elasticsearch cluster
+2. **Sentence Transformers**: Generates vector embeddings for log entries
+3. **FAISS**: Provides fast similarity search over embeddings
+4. **OpenAI API**: Generates natural language responses based on retrieved logs
+5. **FastAPI**: RESTful API interface for client applications
+
+### Data Flow
+
+1. Logs are ingested from Elasticsearch
+2. Each log entry is converted to a vector embedding
+3. Embeddings are stored in FAISS index for efficient search
+4. User queries are embedded and matched against FAISS index
+5. Top-k relevant logs are retrieved
+6. OpenAI generates natural language response based on retrieved logs
+
+### Persistence
+
+- FAISS index saved to `metadata/index.faiss`
+- Progress state tracked via `metadata.json`
+- Batch processing scheduled hourly via schedule library
 
 ## License
 
