@@ -20,7 +20,6 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import uvicorn
 from sklearn.preprocessing import MinMaxScaler
-import openai
 import fnmatch
 
 # Set up logging
@@ -29,8 +28,9 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # Initialize Elasticsearch client
 load_dotenv()
 
-# Replace the existing Elasticsearch and OpenAI initialization lines with:
+# Initialize Elasticsearch and OpenAI clients
 es = Elasticsearch([os.getenv('ELASTICSEARCH_URL')])
+openai.api_key = os.getenv('OPENAI_API_KEY')
 
 # Initialize embedding model
 model = SentenceTransformer('all-MiniLM-L6-v2')
@@ -59,14 +59,17 @@ openai.api_key = os.getenv('OPENAI_API_KEY')
 def load_metadata():
     if os.path.exists(metadata_file):
         with open(metadata_file, 'r') as f:
-            return json.load(f)
+            data = json.load(f)
+            # Convert list back to set for processed_ids
+            data['processed_ids'] = set(data.get('processed_ids', []))
+            return data
     return {'last_processed': '1970-01-01T00:00:00.000Z', 'processed_ids': set()}
 
 def save_metadata(metadata):
     metadata_to_save = metadata.copy()
-    metadata_to_save['processed_ids'] = list(metadata_to_save['processed_ids'])
+    metadata_to_save['processed_ids'] = list(metadata_to_save.get('processed_ids', set()))
     with open(metadata_file, 'w') as f:
-        json.dump(metadata_to_save, f)
+        json.dump(metadata_to_save, f, indent=2)
 
 metadata = load_metadata()
 metadata['processed_ids'] = set(metadata.get('processed_ids', []))
