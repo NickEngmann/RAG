@@ -59,12 +59,30 @@ openai.api_key = os.getenv('OPENAI_API_KEY')
 def load_metadata():
     if os.path.exists(metadata_file):
         with open(metadata_file, 'r') as f:
-            return json.load(f)
+            data = json.load(f)
+            # Convert processed_ids from list to set if needed
+            if 'processed_ids' in data and isinstance(data['processed_ids'], list):
+                data['processed_ids'] = set(data['processed_ids'])
+            return data
     return {'last_processed': '1970-01-01T00:00:00.000Z', 'processed_ids': set()}
 
 def save_metadata(metadata):
-    metadata_to_save = metadata.copy()
-    metadata_to_save['processed_ids'] = list(metadata_to_save['processed_ids'])
+    metadata_to_save = {}
+    for key, value in metadata.items():
+        if isinstance(value, set):
+            metadata_to_save[key] = list(value)
+        else:
+            metadata_to_save[key] = value
+    with open(metadata_file, 'w') as f:
+        json.dump(metadata_to_save, f)
+
+def save_metadata(metadata):
+    metadata_to_save = {}
+    for key, value in metadata.items():
+        if isinstance(value, set):
+            metadata_to_save[key] = list(value)
+        else:
+            metadata_to_save[key] = value
     with open(metadata_file, 'w') as f:
         json.dump(metadata_to_save, f)
 
