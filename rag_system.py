@@ -197,7 +197,27 @@ def rag_query(query_text, time_range=None, hostname_pattern=None, k=5):
     
     return results
 
-def generate_llm_response(query, relevant_logs):
+def generate_llm_response(query, relevant_logs, model="gpt-3.5-turbo", max_retries=3):
+    """
+    Generate LLM response with retry logic and error handling.
+    
+    Args:
+        query: The user's query string
+        relevant_logs: List of relevant log entries
+        model: LLM model to use (default: gpt-3.5-turbo)
+        max_retries: Maximum number of retry attempts (default: 3)
+    
+    Returns:
+        Generated response string
+    
+    Raises:
+        HTTPException: If all retries fail
+    """
+    import time
+    
+    if not relevant_logs:
+        return "No relevant logs found to answer the query."
+    
     system_prompt = """
     You are an AI research assistant analyzing text chunks from web sources to answer queries accurately and concisely.
 
@@ -224,13 +244,84 @@ def generate_llm_response(query, relevant_logs):
         {"role": "user", "content": f"Query: {query}\n\nRelevant log entries:\n{chunks}"}
     ]
 
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=messages,
-        max_tokens=500
-    )
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            response = openai.ChatCompletion.create(
+                model=model,
+                messages=messages,
+                max_tokens=500
+            )
+            return response.choices[0].message['content'].strip()
+        except openai.error.RateLimitError as e:
+            last_error = e
+            wait_time = (2 ** attempt) * 1  # Exponential backoff: 1, 2, 4 seconds
+            logging.warning(f"Rate limit hit. Retrying in {wait_time} seconds (attempt {attempt + 1}/{max_retries})")
+            time.sleep(wait_time)
+        except openai.error.ServiceUnavailableError as e:
+            last_error = e
+            wait_time = (2 ** attempt) * 1
+            logging.warning(f"Service unavailable. Retrying in {wait_time} seconds (attempt {attempt + 1}/{max_retries})")
+            time.sleep(wait_time)
+        except openai.error.APIError as e:
+            last_error = e
+            logging.warning(f"API error on attempt {attempt + 1}/{max_retries}: {str(e)}")
+            if attempt < max_retries - 1:
+                time.sleep(1)
+        except Exception as e:
+            logging.error(f"Unexpected error during LLM generation: {str(e)}")
+            raise HTTPException(status_code=503, detail=f"LLM service unavailable: {str(e)}")
+    
+    raise HTTPException(status_code=503, detail=f"Failed to generate response after {max_retries} attempts. Last error: {str(last_error)}")
 
-    return response.choices[0].message['content'].strip()
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint to verify system status."""
+    health_status = {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "components": {
+            "elasticsearch": "unknown",
+            "faiss_index": "unknown",
+            "embedding_model": "unknown"
+        }
+    }
+    
+    # Check Elasticsearch connection
+    try:
+        if es.ping():
+            health_status["components"]["elasticsearch"] = "healthy"
+        else:
+            health_status["components"]["elasticsearch"] = "unhealthy"
+    except Exception as e:
+        health_status["components"]["elasticsearch"] = f"error: {str(e)}"
+    
+    # Check FAISS index
+    try:
+        if os.path.exists(index_file):
+            index_size = faiss.read_index(index_file).ntotal
+            health_status["components"]["faiss_index"] = f"healthy ({index_size} vectors)"
+        else:
+            health_status["components"]["faiss_index"] = "unhealthy (index not found)"
+    except Exception as e:
+        health_status["components"]["faiss_index"] = f"error: {str(e)}"
+    
+    # Check embedding model
+    try:
+        test_embedding = model.encode(["test"])
+        health_status["components"]["embedding_model"] = f"healthy (dimension: {test_embedding.shape[1]})"
+    except Exception as e:
+        health_status["components"]["embedding_model"] = f"error: {str(e)}"
+    
+    # Overall status
+    if all(component != "unhealthy" and not component.startswith("error:") 
+           for component in health_status["components"].values()):
+        health_status["status"] = "healthy"
+    else:
+        health_status["status"] = "degraded"
+    
+    return health_status
 
 app = FastAPI()
 
