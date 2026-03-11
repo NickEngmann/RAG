@@ -18,6 +18,6 @@ if __name__ == "__main__":
         'elastic-test.py',
         'gc-test.py'
     ]
-
+    
     for script in test_scripts:
-        run_test(script)
+        run_test(f'test/{script}')

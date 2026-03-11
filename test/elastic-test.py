@@ -8,15 +8,20 @@ print("Testing elasticsearch...")
 
 load_dotenv()
 
-# Replace the existing Elasticsearch and OpenAI initialization lines with:
-es = Elasticsearch([os.getenv('ELASTICSEARCH_URL')])
+# Get Elasticsearch URL from environment variable
+es_url = os.getenv('ELASTICSEARCH_URL')
 
-# Check if the cluster is up
-if es.ping():
-    print("Connected to Elasticsearch")
-    info = es.info()
-    print(f"Elasticsearch version: {info['version']['number']}")
+if es_url:
+    es = Elasticsearch([es_url])
+    # Check if the cluster is up
+    if es.ping():
+        print("Connected to Elasticsearch")
+        info = es.info()
+        print(f"Elasticsearch version: {info['version']['number']}")
+    else:
+        print("Could not connect to Elasticsearch")
 else:
-    print("Could not connect to Elasticsearch")
+    print("Elasticsearch URL not set, skipping test")
+    print("Set ELASTICSEARCH_URL environment variable to test Elasticsearch connection")
 
 print("elasticsearch test completed successfully")

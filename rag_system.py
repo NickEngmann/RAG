@@ -71,10 +71,32 @@ def save_metadata(metadata):
 metadata = load_metadata()
 metadata['processed_ids'] = set(metadata.get('processed_ids', []))
 
+# Fit time scaler with all historical timestamps
+def fit_time_scaler():
+    """Fit the time scaler with all historical timestamps from metadata."""
+    timestamps = []
+    for key, value in metadata.items():
+        if key.startswith('vector_') and isinstance(value, dict):
+            try:
+                ts = parse(value['timestamp']).timestamp()
+                timestamps.append([ts])
+            except (ValueError, KeyError):
+                continue
+    
+    if timestamps:
+        time_scaler.fit(timestamps)
+        logging.info(f"Fitted time scaler with {len(timestamps)} historical timestamps")
+    else:
+        # Default fit with a reasonable range if no historical data
+        time_scaler.fit([[1609459200.0], [1735689600.0]])  # 2021-01-01 to 2025-01-01
+        logging.info("Fitted time scaler with default date range")
+
+fit_time_scaler()
+
 def preprocess_log(log_entry):
     timestamp = parse(log_entry['@timestamp'])
     timestamp_value = timestamp.timestamp()
-    normalized_time = time_scaler.fit_transform([[timestamp_value]])[0][0]
+    normalized_time = time_scaler.transform([[timestamp_value]])[0][0]
     message = log_entry['message'][:1000]  # Truncate to save memory
     hostname = log_entry.get('hostname', 'unknown')
     return message, normalized_time, hostname
@@ -173,12 +195,20 @@ def rag_query(query_text, time_range=None, hostname_pattern=None, k=5):
         normalized_end = time_scaler.transform([[end_timestamp]])[0][0]
         
         time_context = (normalized_start + normalized_end) / 2
-        query_vector = np.hstack((query_vector, np.array([[time_context]])))
+        query_vector = np.hstack((query_vector, np.array([time_context])))
     else:
-        query_vector = np.hstack((query_vector, np.array([[0.5]])))  # Neutral time context
+        query_vector = np.hstack((query_vector, np.array([0.5])))  # Neutral time context
     
     faiss.normalize_L2(query_vector)
-    _, I = index.search(query_vector, k * 2)  # Fetch more results initially
+    
+    # Handle empty index case
+    if index.ntotal == 0:
+        return []
+    
+    search_result = index.search(query_vector, k * 2)  # Fetch more results initially
+    if not search_result or len(search_result) == 0:
+        return []
+    _, I = search_result
     
     results = []
     for i in I[0]:
