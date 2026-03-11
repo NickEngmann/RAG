@@ -22,6 +22,7 @@ import uvicorn
 from sklearn.preprocessing import MinMaxScaler
 import openai
 import fnmatch
+import sys
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -234,6 +235,54 @@ def generate_llm_response(query, relevant_logs):
 
 app = FastAPI()
 
+# Health status tracking
+health_status = {
+    'elasticsearch': 'unknown',
+    'sentence_transformers': 'unknown',
+    'faiss': 'unknown',
+    'openai': 'unknown',
+    'last_check': None
+}
+
+def check_dependencies():
+    """Check and update health status of all dependencies."""
+    # Check Elasticsearch
+    try:
+        es.ping()
+        health_status['elasticsearch'] = 'healthy'
+    except Exception:
+        health_status['elasticsearch'] = 'unavailable'
+    
+    # Check sentence-transformers
+    try:
+        model = SentenceTransformer('all-MiniLM-L6-v2')
+        health_status['sentence_transformers'] = 'healthy'
+    except Exception:
+        health_status['sentence_transformers'] = 'unavailable'
+    
+    # Check FAISS
+    try:
+        import faiss
+        health_status['faiss'] = 'healthy'
+    except Exception:
+        health_status['faiss'] = 'unavailable'
+    
+    # Check OpenAI
+    try:
+        api_key = os.getenv('OPENAI_API_KEY')
+        if api_key:
+            health_status['openai'] = 'configured'
+        else:
+            health_status['openai'] = 'not_configured'
+    except Exception:
+        health_status['openai'] = 'unavailable'
+    
+    health_status['last_check'] = datetime.now().isoformat()
+    return health_status
+
+# Initialize health status on startup
+check_dependencies()
+
 class Query(BaseModel):
     text: str
     k: int = 5
@@ -241,20 +290,54 @@ class Query(BaseModel):
     end_time: str = None
     hostname_pattern: str = None
 
+@app.get("/health")
+async def health_check():
+    """Check the health status of all dependencies."""
+    status = check_dependencies()
+    all_healthy = all([
+        status.get('elasticsearch') in ['healthy', 'unavailable'],
+        status.get('sentence_transformers') in ['healthy', 'unavailable'],
+        status.get('faiss') in ['healthy', 'unavailable'],
+        status.get('openai') in ['configured', 'not_configured']
+    ])
+    return {
+        'status': 'healthy' if all_healthy else 'degraded',
+        'dependencies': status
+    }
+
 @app.post("/rag_query")
 async def api_rag_query(query: Query):
     try:
+        # Check if required dependencies are available
+        if health_status['sentence_transformers'] == 'unavailable':
+            raise HTTPException(status_code=503, detail='Sentence transformers not available')
+        if health_status['faiss'] == 'unavailable':
+            raise HTTPException(status_code=503, detail='FAISS not available')
+        
         time_range = None
         if query.start_time and query.end_time:
             time_range = (parse(query.start_time), parse(query.end_time))
         
         relevant_logs = rag_query(query.text, time_range, query.hostname_pattern, query.k)
-        llm_response = generate_llm_response(query.text, relevant_logs)
         
-        return {
-            "answer": llm_response,
-            "relevant_logs": relevant_logs
-        }
+        # Only generate LLM response if OpenAI is configured
+        if health_status['openai'] == 'configured':
+            llm_response = generate_llm_response(query.text, relevant_logs)
+            return {
+                "answer": llm_response,
+                "relevant_logs": relevant_logs,
+                "mode": "llm"
+            }
+        else:
+            # Return relevant logs without LLM response
+            return {
+                "answer": None,
+                "relevant_logs": relevant_logs,
+                "mode": "search_only",
+                "note": "OpenAI not configured, returning search results only"
+            }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
