@@ -50,8 +50,17 @@ else:
 # Metadata storage
 metadata_file = "/mnt/vectordb/metadata.json"
 
-# Initialize time scaler
-time_scaler = MinMaxScaler()
+# Time scaler class for testing
+class TimeScaler:
+    """Wrapper for MinMaxScaler to allow testing."""
+    def __init__(self):
+        self.scaler = MinMaxScaler()
+    
+    def fit_transform(self, X):
+        return self.scaler.fit_transform(X)
+
+# Initialize time scaler instance
+time_scaler = TimeScaler()
 
 # OpenAI API key
 openai.api_key = os.getenv('OPENAI_API_KEY')
@@ -71,7 +80,18 @@ def save_metadata(metadata):
 metadata = load_metadata()
 metadata['processed_ids'] = set(metadata.get('processed_ids', []))
 
-def preprocess_log(log_entry):
+def preprocess_log(log_entry, time_scaler=None):
+    """Preprocess a log entry.
+    
+    Args:
+        log_entry: Dictionary containing log data with @timestamp and message
+        time_scaler: Optional time scaler instance (uses module-level if not provided)
+    
+    Returns:
+        Tuple of (message, normalized_time, hostname)
+    """
+    if time_scaler is None:
+        time_scaler = time_scaler
     timestamp = parse(log_entry['@timestamp'])
     timestamp_value = timestamp.timestamp()
     normalized_time = time_scaler.fit_transform([[timestamp_value]])[0][0]
