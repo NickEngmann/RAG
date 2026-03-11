@@ -19,6 +19,8 @@ def test_torch():
         print("PyTorch test completed successfully.")
     except Exception as e:
         print(f"PyTorch test failed. Error: {str(e)}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     test_torch()
+    sys.exit(0)

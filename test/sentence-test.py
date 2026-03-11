@@ -1,16 +1,23 @@
 #!/usr/bin/env python3
 
-from sentence_transformers import SentenceTransformer
-import numpy as np
+import sys
 
-print("Testing sentence_transformers...")
+try:
+    from sentence_transformers import SentenceTransformer
+    import numpy as np
 
-model = SentenceTransformer('all-MiniLM-L6-v2')
-sentences = ['This is a test sentence.', 'Another sentence for embedding.']
+    print("Testing sentence_transformers...")
 
-embeddings = model.encode(sentences)
-print(f"Shape of embeddings: {embeddings.shape}")
-print(f"Type of embeddings: {type(embeddings)}")
-print(f"Sample embedding:\n{embeddings[0][:5]}...")  # Print first 5 values of first embedding
+    model = SentenceTransformer('all-MiniLM-L6-v2')
+    sentences = ['This is a test sentence.', 'Another sentence for embedding.']
 
-print("sentence_transformers test completed successfully")
+    embeddings = model.encode(sentences)
+    print(f"Shape of embeddings: {embeddings.shape}")
+    print(f"Type of embeddings: {type(embeddings)}")
+    print(f"Sample embedding:\n{embeddings[0][:5]}...")  # Print first 5 values of first embedding
+
+    print("sentence_transformers test completed successfully")
+    sys.exit(0)
+except Exception as e:
+    print(f"sentence_transformers test failed. Error: {str(e)}")
+    sys.exit(1)
