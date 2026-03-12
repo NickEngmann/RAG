@@ -74,6 +74,59 @@ This project implements a Retrieval-Augmented Generation (RAG) system for log an
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
+## Testing
+
+The project includes several test scripts to verify dependencies and functionality:
+
+### Test Scripts
+
+- **tqdm-test.py**: Tests the tqdm progress bar library
+- **pytorch-test.py**: Tests PyTorch installation and tensor operations
+- **sentence-test.py**: Tests sentence-transformers model loading and embedding generation
+- **elastic-test.py**: Tests Elasticsearch connection and basic operations
+- **gc-test.py**: Tests garbage collection functionality
+
+### Running Tests
+
+To run all tests:
+```bash
+cd /workspace/repo/test && python requirements-test.py
+```
+
+To run individual tests:
+```bash
+cd /workspace/repo/test && python tqdm-test.py
+cd /workspace/repo/test && python pytorch-test.py
+cd /workspace/repo/test && python sentence-test.py
+cd /workspace/repo/test && python elastic-test.py
+cd /workspace/repo/test && python gc-test.py
+```
+
+### Test Requirements
+
+- Python 3.8+
+- All dependencies from requirements.txt
+- Elasticsearch instance (for elastic-test.py)
+- OpenAI API key (for some tests)
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Elasticsearch Connection Error**: Ensure ELASTICSEARCH_URL is correctly set in .env file and Elasticsearch is running
+2. **OpenAI API Error**: Verify OPENAI_API_KEY is set and has valid credentials
+3. **Memory Issues**: Reduce batch_size in process_new_logs() function
+4. **FAISS Index Errors**: Ensure /mnt/vectordb/ directory exists and is writable
+
+### Environment Setup
+
+Create a .env file with the following variables:
+```
+ELASTICSEARCH_URL=http://your_elasticsearch_ip:9200
+OPENAI_API_KEY=your_openai_api_key
+```
+
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
