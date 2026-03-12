@@ -70,6 +70,46 @@ This project implements a Retrieval-Augmented Generation (RAG) system for log an
 - Modify the `schedule.every(1).hour.do(process_new_logs)` line to change how often new logs are processed.
 - Update the `dimension` variable if you change the embedding model.
 
+## Testing
+
+The project includes several test scripts to verify individual components:
+
+### Running Individual Tests
+
+```bash
+# Test PyTorch installation and tensor operations
+python test/pytorch-test.py
+
+# Test sentence-transformers model loading and embedding generation
+python test/sentence-test.py
+
+# Test tqdm progress bar functionality
+python test/tqdm-test.py
+
+# Test Elasticsearch connection
+python test/elastic-test.py
+
+# Test garbage collection behavior
+python test/gc-test.py
+
+# Run all tests at once
+python test/requirements-test.py
+```
+
+### Test Descriptions
+
+- **pytorch-test.py**: Verifies PyTorch installation, creates random tensors, performs matrix operations, and tests tensor manipulation functions.
+
+- **sentence-test.py**: Tests loading of sentence-transformer models, generates embeddings for sample texts, and verifies cosine similarity calculations.
+
+- **tqdm-test.py**: Validates tqdm progress bar functionality with simulated processing loops.
+
+- **elastic-test.py**: Tests Elasticsearch connection, version retrieval, and cluster health check.
+
+- **gc-test.py**: Monitors garbage collection behavior by creating and deleting objects.
+
+- **requirements-test.py**: A test runner that executes all individual test scripts and reports results.
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
